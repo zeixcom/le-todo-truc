@@ -1,0 +1,7 @@
+import '../components/basic-button/basic-button.ts'
+import '../components/basic-pluralize/basic-pluralize.ts'
+import '../components/form-checkbox/form-checkbox.ts'
+import '../components/form-radiogroup/form-radiogroup.ts'
+import '../components/form-textbox/form-textbox.ts'
+import '../components/module-list/module-list.ts'
+import '../components/module-todo/module-todo.ts'

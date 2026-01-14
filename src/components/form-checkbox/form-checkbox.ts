@@ -1,0 +1,50 @@
+import {
+	asString,
+	type Component,
+	createSensor,
+	defineComponent,
+	read,
+	setText,
+	toggleAttribute,
+} from '@zeix/le-truc'
+
+export type FormCheckboxProps = {
+	readonly checked: boolean
+	label: string
+}
+
+type FormCheckboxUI = {
+	checkbox: HTMLInputElement
+	label?: HTMLElement
+}
+
+declare global {
+	interface HTMLElementTagNameMap {
+		'form-checkbox': Component<FormCheckboxProps>
+	}
+}
+
+export default defineComponent<FormCheckboxProps, FormCheckboxUI>(
+	'form-checkbox',
+	{
+		checked: createSensor(
+			read(ui => ui.checkbox.checked, false),
+			'checkbox',
+			{
+				change: ({ target }) => target.checked,
+			},
+		),
+		label: asString(
+			({ host, label }) =>
+				label?.textContent ?? host.querySelector('label')?.textContent ?? '',
+		),
+	},
+	({ first }) => ({
+		checkbox: first('input[type="checkbox"]', 'Add a native checkbox.'),
+		label: first('.label'),
+	}),
+	() => ({
+		host: toggleAttribute('checked'),
+		label: setText('label'),
+	}),
+)
