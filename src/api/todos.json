@@ -1,0 +1,88 @@
+{
+	"todos": [
+		{
+			"id": "todo_1",
+			"title": "Install Le Truc library via npm",
+			"createdAt": "2026-01-10T09:15:00Z",
+			"completedAt": "2026-01-10T09:30:00Z"
+		},
+		{
+			"id": "todo_2",
+			"title": "Set up basic Le Truc project structure",
+			"createdAt": "2026-01-10T09:35:00Z",
+			"completedAt": "2026-01-10T10:15:00Z"
+		},
+		{
+			"id": "todo_3",
+			"title": "Read Le Truc documentation overview",
+			"createdAt": "2026-01-10T10:20:00Z",
+			"completedAt": "2026-01-10T11:45:00Z"
+		},
+		{
+			"id": "todo_4",
+			"title": "Learn about Le Truc signals and reactivity",
+			"createdAt": "2026-01-10T14:00:00Z",
+			"completedAt": "2026-01-11T09:30:00Z"
+		},
+		{
+			"id": "todo_5",
+			"title": "Create first signal example",
+			"createdAt": "2026-01-11T09:45:00Z",
+			"completedAt": "2026-01-11T10:30:00Z"
+		},
+		{
+			"id": "todo_6",
+			"title": "Understand computed signals in Le Truc",
+			"createdAt": "2026-01-11T11:00:00Z",
+			"completedAt": "2026-01-11T15:20:00Z"
+		},
+		{
+			"id": "todo_7",
+			"title": "Study Le Truc Web Components basics",
+			"createdAt": "2026-01-11T16:00:00Z",
+			"completedAt": "2026-01-12T10:00:00Z"
+		},
+		{
+			"id": "todo_8",
+			"title": "Build a custom Web Component with Le Truc",
+			"createdAt": "2026-01-12T10:15:00Z",
+			"completedAt": "2026-01-12T14:45:00Z"
+		},
+		{
+			"id": "todo_9",
+			"title": "Learn Le Truc data flow patterns",
+			"createdAt": "2026-01-12T15:00:00Z",
+			"completedAt": "2026-01-13T11:30:00Z"
+		},
+		{
+			"id": "todo_10",
+			"title": "Implement parent-child component communication",
+			"createdAt": "2026-01-13T11:45:00Z",
+			"completedAt": null
+		},
+		{
+			"id": "todo_11",
+			"title": "Study async behavior in Le Truc",
+			"createdAt": "2026-01-13T14:00:00Z",
+			"completedAt": null
+		},
+		{
+			"id": "todo_12",
+			"title": "Create async signal with data fetching",
+			"createdAt": "2026-01-13T15:30:00Z",
+			"completedAt": null
+		},
+		{
+			"id": "todo_13",
+			"title": "Handle loading and error states with async signals",
+			"createdAt": "2026-01-14T09:00:00Z",
+			"completedAt": null
+		},
+		{
+			"id": "todo_14",
+			"title": "Build complete Le Truc demo app integrating all concepts",
+			"createdAt": "2026-01-14T10:30:00Z",
+			"completedAt": null
+		}
+	]
+}

@@ -23,9 +23,19 @@ const routes: Route[] = [
 		contentType: 'text/javascript; charset=utf-8',
 	},
 	{
+		path: '/assets/main.js.map',
+		filePath: './dist/assets/main.js.map',
+		contentType: 'application/json; charset=utf-8',
+	},
+	{
 		path: '/assets/main.css',
 		filePath: './dist/assets/main.css',
 		contentType: 'text/css; charset=utf-8',
+	},
+	{
+		path: '/api/todos/',
+		filePath: './src/api/todos.json',
+		contentType: 'application/json; charset=utf-8',
 	},
 ]
 
