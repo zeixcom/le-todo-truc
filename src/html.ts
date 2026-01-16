@@ -1,24 +1,22 @@
-type ClassList = (string | string[] | undefined)[]
+type Tokens = string | number | boolean | null | undefined | Tokens[]
 
-const html = (strings: TemplateStringsArray, ...values: unknown[]) =>
-	String.raw(
-		{ raw: strings },
-		...values.map(value =>
-			typeof value === 'string'
-				? value
-				: typeof value === 'number'
-					? value.toString()
-					: Array.isArray(value)
-						? value.filter(Boolean).flat().join(' ')
-						: '',
-		),
-	)
+const val = (value: Tokens) =>
+	typeof value === 'string'
+		? value
+		: typeof value === 'number'
+			? String(value)
+			: Array.isArray(value)
+				? value.filter(Boolean).flat().join(' ')
+				: ''
 
-const classes = (tokens?: ClassList) => {
-	const className = Array.isArray(tokens)
-		? tokens.filter(Boolean).flat().join(' ')
-		: ''
-	return className ? `class="${className}"` : ''
+const html = (strings: TemplateStringsArray, ...values: Tokens[]) =>
+	String.raw({ raw: strings }, ...values.map(val))
+
+const attr = (name: string, tokens?: Tokens) => {
+	if (tokens == null || tokens === false) return ''
+
+	const value = val(tokens)
+	return value === '' ? name : value ? `${name}="${value}"` : ''
 }
 
-export { type ClassList, html, classes }
+export { attr, type Tokens, html }

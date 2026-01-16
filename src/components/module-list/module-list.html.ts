@@ -1,6 +1,7 @@
-import { html } from '../../html'
+import { attr, html, type Tokens } from '../../html'
 
-type ModuleListServerProps = {
+type ModuleListRenderProps = {
+	classList?: Tokens
 	filter?: string
 	list?: string
 	item?: string
@@ -8,14 +9,18 @@ type ModuleListServerProps = {
 }
 
 export function ModuleList({
+	classList,
 	filter,
 	list,
 	item,
 	controls,
-}: ModuleListServerProps) {
-	return html`<module-list ${filter && `filter="${filter}"`}>
-		${list ? list : '<ul data-container></ul>'}
-		<template> ${item ? item : '<li><slot></slot></li>'} </template>
+}: ModuleListRenderProps) {
+	return html`<module-list
+		${attr('filter', filter)}
+		${attr('class', classList)}
+	>
+		${list ? list : html`<ul data-container></ul>`}
+		<template> ${item ? item : html`<li><slot></slot></li>`} </template>
 		${controls}
 	</module-list> `
 }

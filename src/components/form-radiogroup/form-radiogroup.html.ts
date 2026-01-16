@@ -1,6 +1,6 @@
-import { type ClassList, classes, html } from '../../html'
+import { attr, html, type Tokens } from '../../html'
 
-type FormRadiobuttonServerProps = {
+type FormRadiobuttonRenderProps = {
 	name: string
 	value: string
 	label: string
@@ -8,8 +8,8 @@ type FormRadiobuttonServerProps = {
 	controlsHidden: boolean
 }
 
-type FormRadiogroupServerProps = {
-	classList?: ClassList
+type FormRadiogroupRenderProps = {
+	classList?: Tokens
 	legend: string
 	legendHidden: boolean
 	name: string
@@ -24,8 +24,8 @@ function FormRadiobutton({
 	label,
 	checked,
 	controlsHidden,
-}: FormRadiobuttonServerProps) {
-	return html`<label ${checked && `class= "selected"`}>
+}: FormRadiobuttonRenderProps) {
+	return html`<label ${checked && `class="selected"`}>
 		<input
 			type="radio"
 			${controlsHidden && 'class="visually-hidden"'}
@@ -45,8 +45,8 @@ export function FormRadiogroup({
 	options,
 	selected,
 	controlsHidden,
-}: FormRadiogroupServerProps) {
-	return html`<form-radiogroup ${classes(classList)}>
+}: FormRadiogroupRenderProps) {
+	return html`<form-radiogroup ${attr('class', classList)}>
 		<fieldset>
 			<legend ${legendHidden && `class="visually-hidden"`}>${legend}</legend>
 			${Object.entries(options)

@@ -26,12 +26,13 @@ export function ModuleTodo() {
 		</form>
 		${ModuleList({
 			filter: 'all',
-			list: '<ol data-container></ol>',
+			list: html`<ol data-container></ol>`,
 			item: html`<li>
 				${FormCheckbox({ classList: ['todo'], label: html`<slot></slot>` })}
 				${BasicButton({
 					classList: ['delete'],
 					label: '✕',
+					ariaLabel: 'Delete',
 					variant: ['tertiary', 'destructive'],
 					size: 'small',
 				})}
@@ -41,9 +42,7 @@ export function ModuleTodo() {
 			${BasicPluralize({
 				content: html`<p class="none">Well done, all done!</p>
 					<p class="some">
-						<span class="count"></span>
-						<span class="one">task</span>
-						<span class="other">tasks</span>
+						<span class="count"></span> task<span class="other">s</span>
 						remaining
 					</p>`,
 			})}

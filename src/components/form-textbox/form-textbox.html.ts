@@ -1,7 +1,7 @@
-import { type ClassList, classes, html } from '../../html'
+import { attr, html, type Tokens } from '../../html'
 
-type FormTextboxServerProps = {
-	classList?: ClassList
+type FormTextboxRenderProps = {
+	classList?: Tokens
 	id: string
 	name: string
 	value?: string
@@ -22,18 +22,21 @@ export function FormTextbox({
 	autocomplete,
 	clearable,
 	description,
-}: FormTextboxServerProps) {
-	return html`<form-textbox ${clearable && 'clearable'} ${classes(classList)}>
+}: FormTextboxRenderProps) {
+	return html`<form-textbox
+		${attr('clearable', clearable)}
+		${attr('class', classList)}
+	>
 		<label for="${id}">${label}</label>
 		<div class="input">
 			<input
 				type="text"
 				id="${id}"
 				name="${name}"
-				${value && `value="${value}"`}
-				${autocomplete && `autocomplete= "${autocomplete}"`}
-				${required && 'required'}
-				${description && `aria-describedby="${id}-description"`}
+				${attr('value', value)}
+				${attr('autocomplete', autocomplete)}
+				${attr('required', required)}
+				${attr('aria-describedby', description && `${id}-description`)}
 			/>
 			${clearable
 			&& html`<button

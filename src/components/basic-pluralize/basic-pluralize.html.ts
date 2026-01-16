@@ -1,7 +1,7 @@
-import { classes, html } from '../../html'
+import { attr, html, type Tokens } from '../../html'
 
-type BasicPluralizeServerProps = {
-	classList?: (string | undefined)[]
+type BasicPluralizeRenderProps = {
+	classList?: Tokens
 	count?: number
 	lang?: string
 	ordinal?: boolean
@@ -14,12 +14,12 @@ export function BasicPluralize({
 	lang,
 	ordinal,
 	content,
-}: BasicPluralizeServerProps) {
+}: BasicPluralizeRenderProps) {
 	return html`<basic-pluralize
-		${count && `count=${count}`}
-		${lang && `lang="${lang}"`}
-		${ordinal && 'ordinal'}
-		${classes(classList)}
+		${attr('count', count)}
+		${attr('lang', lang)}
+		${attr('ordinal', ordinal)}
+		${attr('class', classList)}
 	>
 		${content}
 	</basic-pluralize>`
