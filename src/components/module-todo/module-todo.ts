@@ -1,13 +1,12 @@
 import {
 	type Component,
-	createCollection,
-	createComputed,
 	createEffect,
+	createElementsMemo,
+	createTask,
 	defineComponent,
 	match,
 	on,
 	pass,
-	resolve,
 	setAttribute,
 } from '@zeix/le-truc'
 import type { BasicButtonProps } from '../basic-button/basic-button'
@@ -70,10 +69,9 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 		),
 	}),
 	({ textbox, list, filter }) => {
-		const active = createCollection(list, 'form-checkbox:not([checked])')
-		const completed = createCollection(list, 'form-checkbox[checked]')
-
-		const data = createComputed<TodoItem[]>(async (_prev, abort) => {
+		const active = createElementsMemo(list, 'form-checkbox:not([checked])')
+		const completed = createElementsMemo(list, 'form-checkbox[checked]')
+		const data = createTask<TodoItem[]>(async (_prev, abort) => {
 			const response = await fetch('http://localhost:3000/api/todos/', {
 				signal: abort,
 			})
@@ -86,8 +84,8 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 		return {
 			host: () =>
 				createEffect(() => {
-					match(resolve({ data }), {
-						ok: ({ data: todos }) => {
+					match([data], {
+						ok: ([todos]) => {
 							for (const todo of todos) {
 								list.add(item => {
 									item.querySelector('slot')?.replaceWith(todo.title)
@@ -112,11 +110,12 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 			}),
 			submit: pass({ disabled: () => !textbox.length }),
 			list: setAttribute('filter', () => filter?.value || 'all'),
-			count: pass({ count: () => active.length }),
+			count: pass({ count: () => active.get().length }),
 			clearCompleted: [
 				pass({
-					disabled: () => !completed.length,
-					badge: () => (completed.length ? String(completed.length) : ''),
+					disabled: () => !completed.get().length,
+					badge: () =>
+						completed.get().length ? String(completed.get().length) : '',
 				}),
 				on('click', () => {
 					const items = completed.get()

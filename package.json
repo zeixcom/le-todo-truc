@@ -12,13 +12,13 @@
 		"serve": "bun src/serve.ts"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.3.11",
+		"@biomejs/biome": "^2.4.4",
 		"@types/bun": "latest"
 	},
 	"peerDependencies": {
-		"typescript": "^5"
+		"typescript": "^5.9.3"
 	},
 	"dependencies": {
-		"@zeix/le-truc": "^0.15.0"
+		"@zeix/le-truc": "^0.16.2"
 	}
 }

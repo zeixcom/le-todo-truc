@@ -450,7 +450,7 @@ a[href] {
 
 [aria-hidden='true'],
 [hidden] {
-	/* @biome-ignore lint/complexity/noImportantStyles: those should really never be visible */
+	/* biome-ignore lint/complexity/noImportantStyles: those should really never be visible */
 	display: none !important;
 }
 
