@@ -3,6 +3,7 @@
 	"module": "index.ts",
 	"type": "module",
 	"scripts": {
+		"test": "bun test",
 		"build:css": "bun build src/assets/main.css --outdir ./dist/assets --minify",
 		"build:js": "bun build src/assets/main.ts --outdir ./dist/assets --define process.env.DEV_MODE=false --minify",
 		"build:js:dev": "bun build src/assets/main.ts --outdir ./dist/assets --define process.env.DEV_MODE=true --sourcemap=external",
@@ -13,12 +14,13 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.4",
+		"@happy-dom/global-registrator": "^20.7.0",
 		"@types/bun": "latest"
 	},
 	"peerDependencies": {
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {
-		"@zeix/le-truc": "^0.16.2"
+		"@zeix/le-truc": "^0.16.3"
 	}
 }

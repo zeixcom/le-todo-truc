@@ -4,7 +4,6 @@ import { BasicPluralize } from '../basic-pluralize/basic-pluralize.html'
 import { FormCheckbox } from '../form-checkbox/form-checkbox.html'
 import { FormRadiogroup } from '../form-radiogroup/form-radiogroup.html'
 import { FormTextbox } from '../form-textbox/form-textbox.html'
-import { ModuleList } from '../module-list/module-list.html'
 
 export function ModuleTodo() {
 	return html`<module-todo class="content">
@@ -24,10 +23,8 @@ export function ModuleTodo() {
 				disabled: true,
 			})}
 		</form>
-		${ModuleList({
-			filter: 'all',
-			list: html`<ol data-container></ol>`,
-			item: html`<li>
+		<template>
+			<li>
 				${FormCheckbox({ classList: ['todo'], label: html`<slot></slot>` })}
 				${BasicButton({
 					classList: ['delete'],
@@ -36,8 +33,9 @@ export function ModuleTodo() {
 					variant: ['tertiary', 'destructive'],
 					size: 'small',
 				})}
-			</li>`,
-		})}
+			</li>
+		</template>
+		<ol class="all"></ol>
 		<footer>
 			${BasicPluralize({
 				content: html`<p class="none">Well done, all done!</p>

@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises'
+import { createTodo, deleteTodo, listTodos, updateTodo } from './api/db.ts'
+import { sseHandler } from './api/sse.ts'
 
 type Route = {
 	path: string
@@ -31,11 +33,6 @@ const routes: Route[] = [
 		path: '/assets/main.css',
 		filePath: './dist/assets/main.css',
 		contentType: 'text/css; charset=utf-8',
-	},
-	{
-		path: '/api/todos/',
-		filePath: './src/api/todos.json',
-		contentType: 'application/json; charset=utf-8',
 	},
 ]
 
@@ -95,6 +92,32 @@ async function serveFile(req: Request, route: Route) {
 	return withCacheHeaders(res, etag)
 }
 
+async function handleApi(req: Request, url: URL): Promise<Response> {
+	const { method } = req
+	const { pathname } = url
+
+	if (pathname === '/api/todos/') {
+		if (method === 'GET') return listTodos()
+		if (method === 'POST') return createTodo(req)
+	}
+
+	if (pathname === '/api/todos/events' && method === 'GET') return sseHandler()
+
+	const idMatch = pathname.match(/^\/api\/todos\/([^/]+)$/)
+	if (idMatch) {
+		const id = idMatch[1]
+		if (id) {
+			if (method === 'PATCH') return updateTodo(req, id)
+			if (method === 'DELETE') return deleteTodo(id)
+		}
+	}
+
+	return new Response(`Not found: ${pathname}\n`, {
+		status: 404,
+		headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+	})
+}
+
 const port = Number(process.env.PORT ?? 3000)
 const hostname = process.env.HOST ?? 'localhost'
 
@@ -104,12 +127,12 @@ Bun.serve({
 	async fetch(req) {
 		try {
 			const url = new URL(req.url)
+			const pathname = url.pathname
+
+			if (pathname.startsWith('/api/')) return handleApi(req, url)
 
 			if (req.method !== 'GET' && req.method !== 'HEAD')
 				return methodNotAllowed()
-
-			// Strip query params; route by pathname only.
-			const pathname = url.pathname
 
 			const route = routes.find(r => r.path === pathname)
 			if (!route) return notFound(url)
@@ -129,5 +152,11 @@ Bun.serve({
 })
 
 console.log(`Dev server running at http://${hostname}:${port}`)
-console.log('Serving only:')
+console.log('Serving static assets:')
 for (const r of routes) console.log(`  ${r.path} -> ${r.filePath}`)
+console.log('API endpoints:')
+console.log('  GET    /api/todos/')
+console.log('  GET    /api/todos/events')
+console.log('  POST   /api/todos/')
+console.log('  PATCH  /api/todos/:id')
+console.log('  DELETE /api/todos/:id')
