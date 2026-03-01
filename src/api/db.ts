@@ -27,7 +27,10 @@ db.run(`
 	)
 `)
 
-const { n } = db.query<{ n: number }, []>('SELECT COUNT(*) as n FROM todos').get()!
+// biome-ignore lint/style/noNonNullAssertion: example
+const { n } = db
+	.query<{ n: number }, []>('SELECT COUNT(*) as n FROM todos')
+	.get()!
 if (n === 0) {
 	const insert = db.prepare<void, [string, string, string, string | null]>(
 		'INSERT INTO todos (id, title, created_at, completed_at) VALUES (?, ?, ?, ?)',
@@ -70,7 +73,9 @@ function notFound(): Response {
 }
 
 export function listTodos(): Response {
-	const rows = db.query<TodoRow, []>('SELECT * FROM todos ORDER BY created_at ASC').all()
+	const rows = db
+		.query<TodoRow, []>('SELECT * FROM todos ORDER BY created_at ASC')
+		.all()
 	return json({ todos: rows.map(rowToTodo) })
 }
 
@@ -82,12 +87,12 @@ export async function createTodo(req: Request): Promise<Response> {
 	const id = `todo_${Date.now()}`
 	const now = new Date().toISOString()
 	const title = body.title.trim()
-	db.run('INSERT INTO todos (id, title, created_at, completed_at) VALUES (?, ?, ?, NULL)', [
-		id,
-		title,
-		now,
-	])
+	db.run(
+		'INSERT INTO todos (id, title, created_at, completed_at) VALUES (?, ?, ?, NULL)',
+		[id, title, now],
+	)
 	const todo = rowToTodo(
+		// biome-ignore lint/style/noNonNullAssertion: example
 		db.query<TodoRow, [string]>('SELECT * FROM todos WHERE id = ?').get(id)!,
 	)
 	broadcast({ type: 'created', todo })
@@ -101,7 +106,9 @@ export async function updateTodo(req: Request, id: string): Promise<Response> {
 	}
 	const completedAt = body.completedAt as string | null
 	db.run('UPDATE todos SET completed_at = ? WHERE id = ?', [completedAt, id])
-	const row = db.query<TodoRow, [string]>('SELECT * FROM todos WHERE id = ?').get(id)
+	const row = db
+		.query<TodoRow, [string]>('SELECT * FROM todos WHERE id = ?')
+		.get(id)
 	if (!row) return notFound()
 	const todo = rowToTodo(row)
 	broadcast({ type: 'updated', todo })
@@ -109,7 +116,9 @@ export async function updateTodo(req: Request, id: string): Promise<Response> {
 }
 
 export function deleteTodo(id: string): Response {
-	const row = db.query<TodoRow, [string]>('SELECT * FROM todos WHERE id = ?').get(id)
+	const row = db
+		.query<TodoRow, [string]>('SELECT * FROM todos WHERE id = ?')
+		.get(id)
 	if (!row) return notFound()
 	db.run('DELETE FROM todos WHERE id = ?', [id])
 	broadcast({ type: 'deleted', id })
