@@ -3,7 +3,7 @@ import { html } from './html'
 
 export function Page() {
 	return html`<!doctype html>
-		<html>
+		<html lang="en">
 			<head>
 				<meta charset="utf-8" />
 				<title>Le Todo Truc</title>

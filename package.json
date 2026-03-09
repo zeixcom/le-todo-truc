@@ -13,14 +13,14 @@
 		"serve": "bun src/serve.ts"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.4",
-		"@happy-dom/global-registrator": "^20.7.0",
-		"@types/bun": "latest"
+		"@biomejs/biome": "^2.4.6",
+		"@happy-dom/global-registrator": "^20.8.3",
+		"@types/bun": "^1.3.10"
 	},
 	"peerDependencies": {
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {
-		"@zeix/le-truc": "^0.16.3"
+		"@zeix/le-truc": "^1.0.0"
 	}
 }
