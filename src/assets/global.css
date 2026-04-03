@@ -388,6 +388,10 @@ table,
 pre {
 	margin-block-start: 0;
 	margin-block-end: var(--space-l);
+
+	&:last-child {
+		margin-block-end: 0;
+	}
 }
 
 ol,

@@ -31,6 +31,7 @@ type SseEvent =
 	| { type: 'created'; todo: TodoItem }
 	| { type: 'updated'; todo: TodoItem }
 	| { type: 'deleted'; id: string }
+	| { type: 'reordered'; ids: string[] }
 
 type ModuleTodoUI = {
 	form: HTMLFormElement
@@ -84,6 +85,10 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 	({ host, textbox, template, list, items, filter }) => {
 		// Single source of truth — stable keys = server IDs
 		const todos = createList<TodoItem>([], { keyConfig: item => item.id })
+
+		// Drag & drop state — one key being dragged at a time per component instance
+		let dragKey: string | null = null
+
 		const activeCount = createMemo(
 			() => todos.get().filter(t => !t.completedAt).length,
 		)
@@ -119,7 +124,8 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 				() =>
 					createEffect(() => {
 						const keys = [...todos.keys()]
-						const itemElements = items.get()
+						// untrack: DOM mutations from reordering must not re-trigger this effect
+						const itemElements = untrack(() => items.get())
 						// Add items not yet in DOM
 						for (const key of keys) {
 							if (!list.querySelector(`[data-key="${key}"]`)) {
@@ -131,6 +137,7 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 								).firstElementChild
 								if (li && li instanceof HTMLLIElement) {
 									li.dataset.key = key
+									li.draggable = true
 									const todo = itemSignal.get()
 									li.querySelector('slot')?.replaceWith(todo.title)
 									list.append(li)
@@ -148,6 +155,12 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 							const key = el.dataset.key
 							if (key && !todos.byKey(key)) el.closest('li')?.remove()
 						}
+						// Reconcile DOM order to match the List signal
+						for (let i = 0; i < keys.length; i++) {
+							const el = list.querySelector(`li[data-key="${keys[i]}"]`)
+							if (!el) continue
+							if (list.children[i] !== el) list.insertBefore(el, list.children[i] ?? null)
+						}
 					}),
 
 				// SSE subscription — set up once, never torn down by reactive effects
@@ -158,9 +171,18 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 						if (event.type === 'created') {
 							if (!todos.byKey(event.todo.id)) todos.add(event.todo)
 						} else if (event.type === 'updated') {
-							todos.byKey(event.todo.id)?.set(event.todo)
+							todos.replace(event.todo.id, event.todo)
 						} else if (event.type === 'deleted') {
 							if (todos.byKey(event.id)) todos.remove(event.id)
+						} else if (event.type === 'reordered') {
+							// Skip if this client already applied the same order (it was the dragger)
+							const current = todos.get()
+							const currentIds = current.map(t => t.id)
+							if (event.ids.every((id, i) => id === currentIds[i])) return
+							const reordered = event.ids
+								.map(id => current.find(t => t.id === id))
+								.filter((t): t is TodoItem => t !== undefined)
+							todos.set(reordered)
 						}
 					}
 					es.onerror = () => console.warn('SSE connection lost, will reconnect')
@@ -187,6 +209,94 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 			submit: pass({ disabled: () => !textbox.length }),
 			list: [
 				setAttribute('class', () => filter?.value || 'all'),
+				on('dragstart', e => {
+					const li = (e.target as HTMLElement).closest<HTMLLIElement>(
+						'li[data-key]',
+					)
+					if (!li) return
+					dragKey = li.dataset.key ?? null
+					li.classList.add('is-dragging')
+					if (e.dataTransfer) {
+						e.dataTransfer.effectAllowed = 'move'
+						e.dataTransfer.setData('text/plain', dragKey ?? '')
+					}
+				}),
+				on('dragover', e => {
+					e.preventDefault()
+					if (!dragKey) return
+					if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+					// Refresh drop-position indicators
+					for (const el of list.querySelectorAll('.drag-before, .drag-after')) {
+						el.classList.remove('drag-before', 'drag-after')
+					}
+					const li = (e.target as HTMLElement).closest<HTMLLIElement>(
+						'li[data-key]',
+					)
+					if (!li || li.dataset.key === dragKey) return
+					const rect = li.getBoundingClientRect()
+					li.classList.add(
+						e.clientY < rect.top + rect.height / 2
+							? 'drag-before'
+							: 'drag-after',
+					)
+				}),
+				on('dragleave', e => {
+					// Only clear indicators when the pointer leaves the list entirely
+					if (list.contains(e.relatedTarget as Node)) return
+					for (const el of list.querySelectorAll('.drag-before, .drag-after')) {
+						el.classList.remove('drag-before', 'drag-after')
+					}
+				}),
+				on('drop', async e => {
+					e.preventDefault()
+					const targetLi = (e.target as HTMLElement).closest<HTMLLIElement>(
+						'li[data-key]',
+					)
+					if (!dragKey || !targetLi) return
+					const targetKey = targetLi.dataset.key
+					if (!targetKey || targetKey === dragKey) return
+
+					const rect = targetLi.getBoundingClientRect()
+					const before = e.clientY < rect.top + rect.height / 2
+
+					const current = todos.get()
+					const fromIdx = current.findIndex(t => t.id === dragKey)
+					const toIdx = current.findIndex(t => t.id === targetKey)
+					if (fromIdx === -1 || toIdx === -1) return
+
+					// Compute new order
+					const reordered = [...current]
+					// biome-ignore lint/style/noNonNullAssertion: fromIdx is verified !== -1 above
+					const moved = reordered.splice(fromIdx, 1)[0]!
+					// insertAt is relative to the original indices; adjust for the removed item
+					const insertAt = before ? toIdx : toIdx + 1
+					const adjustedIdx = fromIdx < insertAt ? insertAt - 1 : insertAt
+					reordered.splice(adjustedIdx, 0, moved)
+
+					// Update signal — the structural effect reconciles DOM order reactively
+					todos.set(reordered)
+
+					// Clean up visual state before the async persist
+					for (const el of list.querySelectorAll('.drag-before, .drag-after')) {
+						el.classList.remove('drag-before', 'drag-after')
+					}
+					dragKey = null
+
+					// Persist new order to the server
+					await fetch('/api/todos/', {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ ids: reordered.map(t => t.id) }),
+					}).catch(err => console.error('Failed to reorder todos', err))
+				}),
+				on('dragend', () => {
+					for (const el of list.querySelectorAll(
+						'.is-dragging, .drag-before, .drag-after',
+					)) {
+						el.classList.remove('is-dragging', 'drag-before', 'drag-after')
+					}
+					dragKey = null
+				}),
 				on('click', async e => {
 					const el = e.target as HTMLElement
 					if (!(el instanceof HTMLElement)) return
@@ -226,7 +336,8 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 					if (isChecked === serverChecked) return
 					const completedAt = isChecked ? new Date().toISOString() : null
 					// Optimistic: update signal immediately so all derived state reacts
-					todos.byKey(key)?.update(item => ({ ...item, completedAt }))
+					const current = untrack(() => todos.byKey(key)?.get())
+					if (current) todos.replace(key, { ...current, completedAt })
 					fetch(`/api/todos/${key}`, {
 						method: 'PATCH',
 						headers: { 'Content-Type': 'application/json' },

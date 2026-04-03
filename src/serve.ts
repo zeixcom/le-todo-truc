@@ -1,5 +1,11 @@
 import { readFile } from 'node:fs/promises'
-import { createTodo, deleteTodo, listTodos, updateTodo } from './api/db.ts'
+import {
+	createTodo,
+	deleteTodo,
+	listTodos,
+	reorderTodos,
+	updateTodo,
+} from './api/db.ts'
 import { sseHandler } from './api/sse.ts'
 
 type Route = {
@@ -100,6 +106,7 @@ async function handleApi(req: Request, url: URL): Promise<Response> {
 		if (method === 'GET') return listTodos()
 		if (method === 'POST') return createTodo(req)
 	}
+	if (pathname === '/api/todos/' && method === 'PUT') return reorderTodos(req)
 
 	if (pathname === '/api/todos/events' && method === 'GET') return sseHandler()
 
@@ -124,6 +131,7 @@ const hostname = process.env.HOST ?? 'localhost'
 Bun.serve({
 	port,
 	hostname,
+	idleTimeout: 0,
 	async fetch(req) {
 		try {
 			const url = new URL(req.url)
@@ -158,5 +166,6 @@ console.log('API endpoints:')
 console.log('  GET    /api/todos/')
 console.log('  GET    /api/todos/events')
 console.log('  POST   /api/todos/')
+console.log('  PUT    /api/todos/')
 console.log('  PATCH  /api/todos/:id')
 console.log('  DELETE /api/todos/:id')

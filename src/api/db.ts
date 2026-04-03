@@ -14,6 +14,7 @@ type TodoRow = {
 	title: string
 	created_at: string
 	completed_at: string | null
+	sort_order: number
 }
 
 const db = new Database('./src/api/todos.db', { create: true })
@@ -26,6 +27,20 @@ db.run(`
 		completed_at TEXT DEFAULT NULL
 	)
 `)
+
+const columns = db.query<{ name: string }, []>('pragma table_info(todos)').all()
+if (!columns.some(c => c.name === 'sort_order')) {
+	db.run('ALTER TABLE todos ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0')
+	const rows = db
+		.query<{ id: string }, []>('SELECT id FROM todos ORDER BY created_at ASC')
+		.all()
+	const stmt = db.prepare<void, [number, string]>(
+		'UPDATE todos SET sort_order = ? WHERE id = ?',
+	)
+	db.transaction(() => {
+		rows.forEach((row, i) => stmt.run(i, row.id))
+	})()
+}
 
 // biome-ignore lint/style/noNonNullAssertion: example
 const { n } = db
@@ -74,7 +89,10 @@ function notFound(): Response {
 
 export function listTodos(): Response {
 	const rows = db
-		.query<TodoRow, []>('SELECT * FROM todos ORDER BY created_at ASC')
+		.query<
+			TodoRow,
+			[]
+		>('SELECT * FROM todos ORDER BY sort_order ASC, created_at ASC')
 		.all()
 	return json({ todos: rows.map(rowToTodo) })
 }
@@ -87,9 +105,16 @@ export async function createTodo(req: Request): Promise<Response> {
 	const id = `todo_${Date.now()}`
 	const now = new Date().toISOString()
 	const title = body.title.trim()
+	// biome-ignore lint/style/noNonNullAssertion: example
+	const { maxOrder } = db
+		.query<
+			{ maxOrder: number },
+			[]
+		>('SELECT COALESCE(MAX(sort_order), -1) + 1 AS maxOrder FROM todos')
+		.get()!
 	db.run(
-		'INSERT INTO todos (id, title, created_at, completed_at) VALUES (?, ?, ?, NULL)',
-		[id, title, now],
+		'INSERT INTO todos (id, title, created_at, completed_at, sort_order) VALUES (?, ?, ?, NULL, ?)',
+		[id, title, now, maxOrder],
 	)
 	const todo = rowToTodo(
 		// biome-ignore lint/style/noNonNullAssertion: example
@@ -122,5 +147,21 @@ export function deleteTodo(id: string): Response {
 	if (!row) return notFound()
 	db.run('DELETE FROM todos WHERE id = ?', [id])
 	broadcast({ type: 'deleted', id })
+	return new Response(null, { status: 204 })
+}
+
+export async function reorderTodos(req: Request): Promise<Response> {
+	const body = await req.json()
+	if (!Array.isArray(body.ids)) {
+		return badRequest('ids is required as an array')
+	}
+	const ids = body.ids as string[]
+	const stmt = db.prepare<void, [number, string]>(
+		'UPDATE todos SET sort_order = ? WHERE id = ?',
+	)
+	db.transaction(() => {
+		ids.forEach((id, i) => stmt.run(i, id))
+	})()
+	broadcast({ type: 'reordered', ids })
 	return new Response(null, { status: 204 })
 }
