@@ -1,10 +1,17 @@
 import { Database } from 'bun:sqlite'
 import { broadcast } from './sse.ts'
-import todosJson from './todos.json' with { type: 'json' }
+
+type TodoStatus = 'BACKLOG' | 'READY' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'
 
 type TodoItem = {
 	id: string
 	title: string
+	description: string | null
+	dueDate: string | null
+	authorId: string | null
+	assignedToId: string | null
+	tags: string[]
+	status: TodoStatus
 	createdAt: string
 	completedAt: string | null
 }
@@ -12,9 +19,21 @@ type TodoItem = {
 type TodoRow = {
 	id: string
 	title: string
+	description: string | null
+	due_date: string | null
+	author_id: string | null
+	assigned_to_id: string | null
+	tags: string | null
+	status: TodoStatus
 	created_at: string
 	completed_at: string | null
 	sort_order: number
+}
+
+export type User = {
+	id: string
+	name: string
+	email: string
 }
 
 const db = new Database('./src/api/todos.db', { create: true })
@@ -28,8 +47,21 @@ db.run(`
 	)
 `)
 
-const columns = db.query<{ name: string }, []>('pragma table_info(todos)').all()
-if (!columns.some(c => c.name === 'sort_order')) {
+db.run(`
+	CREATE TABLE IF NOT EXISTS users (
+		id    TEXT PRIMARY KEY,
+		name  TEXT NOT NULL,
+		email TEXT NOT NULL UNIQUE
+	)
+`)
+
+// Migrations: add columns to todos if they don't exist yet
+const todoColumns = db
+	.query<{ name: string }, []>('PRAGMA table_info(todos)')
+	.all()
+const todoColumnNames = todoColumns.map(c => c.name)
+
+if (!todoColumnNames.includes('sort_order')) {
 	db.run('ALTER TABLE todos ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0')
 	const rows = db
 		.query<{ id: string }, []>('SELECT id FROM todos ORDER BY created_at ASC')
@@ -42,25 +74,35 @@ if (!columns.some(c => c.name === 'sort_order')) {
 	})()
 }
 
-// biome-ignore lint/style/noNonNullAssertion: example
-const { n } = db
-	.query<{ n: number }, []>('SELECT COUNT(*) as n FROM todos')
-	.get()!
-if (n === 0) {
-	const insert = db.prepare<void, [string, string, string, string | null]>(
-		'INSERT INTO todos (id, title, created_at, completed_at) VALUES (?, ?, ?, ?)',
-	)
-	db.transaction(() => {
-		for (const t of todosJson.todos) {
-			insert.run(t.id, t.title, t.createdAt, t.completedAt)
-		}
-	})()
+if (!todoColumnNames.includes('description')) {
+	db.run('ALTER TABLE todos ADD COLUMN description TEXT DEFAULT NULL')
+}
+if (!todoColumnNames.includes('due_date')) {
+	db.run('ALTER TABLE todos ADD COLUMN due_date TEXT DEFAULT NULL')
+}
+if (!todoColumnNames.includes('author_id')) {
+	db.run('ALTER TABLE todos ADD COLUMN author_id TEXT DEFAULT NULL')
+}
+if (!todoColumnNames.includes('assigned_to_id')) {
+	db.run('ALTER TABLE todos ADD COLUMN assigned_to_id TEXT DEFAULT NULL')
+}
+if (!todoColumnNames.includes('tags')) {
+	db.run('ALTER TABLE todos ADD COLUMN tags TEXT DEFAULT NULL')
+}
+if (!todoColumnNames.includes('status')) {
+	db.run("ALTER TABLE todos ADD COLUMN status TEXT NOT NULL DEFAULT 'BACKLOG'")
 }
 
 function rowToTodo(row: TodoRow): TodoItem {
 	return {
 		id: row.id,
 		title: row.title,
+		description: row.description,
+		dueDate: row.due_date,
+		authorId: row.author_id,
+		assignedToId: row.assigned_to_id,
+		tags: row.tags ? row.tags.split(',').filter(Boolean) : [],
+		status: row.status ?? 'BACKLOG',
 		createdAt: row.created_at,
 		completedAt: row.completed_at,
 	}
@@ -87,6 +129,34 @@ function notFound(): Response {
 	})
 }
 
+function conflict(msg: string): Response {
+	return new Response(JSON.stringify({ error: msg }), {
+		status: 409,
+		headers: { 'Content-Type': 'application/json; charset=utf-8' },
+	})
+}
+
+// ── Todos ────────────────────────────────────────────────────────────────────
+
+const VALID_STATUSES: TodoStatus[] = [
+	'BACKLOG',
+	'READY',
+	'IN_PROGRESS',
+	'IN_REVIEW',
+	'DONE',
+]
+
+const TODO_COLUMN_MAP: Partial<Record<string, string>> = {
+	completedAt: 'completed_at',
+	title: 'title',
+	description: 'description',
+	dueDate: 'due_date',
+	authorId: 'author_id',
+	assignedToId: 'assigned_to_id',
+	tags: 'tags',
+	status: 'status',
+}
+
 export function listTodos(): Response {
 	const rows = db
 		.query<
@@ -102,9 +172,23 @@ export async function createTodo(req: Request): Promise<Response> {
 	if (typeof body.title !== 'string' || !body.title.trim()) {
 		return badRequest('title is required')
 	}
+	if (body.status !== undefined && !VALID_STATUSES.includes(body.status)) {
+		return badRequest(`status must be one of: ${VALID_STATUSES.join(', ')}`)
+	}
 	const id = `todo_${Date.now()}`
 	const now = new Date().toISOString()
 	const title = body.title.trim()
+	const description =
+		typeof body.description === 'string' ? body.description : null
+	const dueDate = typeof body.dueDate === 'string' ? body.dueDate : null
+	const authorId = typeof body.authorId === 'string' ? body.authorId : null
+	const assignedToId =
+		typeof body.assignedToId === 'string' ? body.assignedToId : null
+	const tags = Array.isArray(body.tags)
+		? (body.tags as string[]).join(',')
+		: null
+	const status: TodoStatus = body.status ?? 'BACKLOG'
+
 	// biome-ignore lint/style/noNonNullAssertion: example
 	const { maxOrder } = db
 		.query<
@@ -113,8 +197,21 @@ export async function createTodo(req: Request): Promise<Response> {
 		>('SELECT COALESCE(MAX(sort_order), -1) + 1 AS maxOrder FROM todos')
 		.get()!
 	db.run(
-		'INSERT INTO todos (id, title, created_at, completed_at, sort_order) VALUES (?, ?, ?, NULL, ?)',
-		[id, title, now, maxOrder],
+		`INSERT INTO todos
+			(id, title, description, due_date, author_id, assigned_to_id, tags, status, created_at, completed_at, sort_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+		[
+			id,
+			title,
+			description,
+			dueDate,
+			authorId,
+			assignedToId,
+			tags,
+			status,
+			now,
+			maxOrder,
+		],
 	)
 	const todo = rowToTodo(
 		// biome-ignore lint/style/noNonNullAssertion: example
@@ -126,11 +223,33 @@ export async function createTodo(req: Request): Promise<Response> {
 
 export async function updateTodo(req: Request, id: string): Promise<Response> {
 	const body = await req.json()
-	if (!('completedAt' in body)) {
-		return badRequest('completedAt is required')
+
+	if (body.status !== undefined && !VALID_STATUSES.includes(body.status)) {
+		return badRequest(`status must be one of: ${VALID_STATUSES.join(', ')}`)
 	}
-	const completedAt = body.completedAt as string | null
-	db.run('UPDATE todos SET completed_at = ? WHERE id = ?', [completedAt, id])
+
+	const updates: [string, string | null][] = []
+	for (const [key, col] of Object.entries(TODO_COLUMN_MAP)) {
+		if (!(key in body)) continue
+		const raw = body[key]
+		const val: string | null =
+			key === 'tags' && Array.isArray(raw)
+				? (raw as string[]).join(',')
+				: (raw as string | null)
+		// biome-ignore lint/style/noNonNullAssertion: col always defined via map
+		updates.push([col!, val])
+	}
+
+	if (updates.length === 0) {
+		return badRequest(
+			`at least one of the following fields is required: ${Object.keys(TODO_COLUMN_MAP).join(', ')}`,
+		)
+	}
+
+	const setClauses = updates.map(([col]) => `${col} = ?`).join(', ')
+	const values = updates.map(([, val]) => val)
+	db.run(`UPDATE todos SET ${setClauses} WHERE id = ?`, [...values, id])
+
 	const row = db
 		.query<TodoRow, [string]>('SELECT * FROM todos WHERE id = ?')
 		.get(id)
@@ -163,5 +282,97 @@ export async function reorderTodos(req: Request): Promise<Response> {
 		ids.forEach((id, i) => stmt.run(i, id))
 	})()
 	broadcast({ type: 'reordered', ids })
+	return new Response(null, { status: 204 })
+}
+
+// ── Users ────────────────────────────────────────────────────────────────────
+
+export function listUsers(): Response {
+	const users = db
+		.query<User, []>('SELECT * FROM users ORDER BY name ASC')
+		.all()
+	return json({ users })
+}
+
+export async function createUser(req: Request): Promise<Response> {
+	const body = await req.json()
+	if (typeof body.name !== 'string' || !body.name.trim()) {
+		return badRequest('name is required')
+	}
+	if (typeof body.email !== 'string' || !body.email.trim()) {
+		return badRequest('email is required')
+	}
+	const id = `user_${Date.now()}`
+	const name = body.name.trim()
+	const email = body.email.trim().toLowerCase()
+	try {
+		db.run('INSERT INTO users (id, name, email) VALUES (?, ?, ?)', [
+			id,
+			name,
+			email,
+		])
+	} catch (err) {
+		if (err instanceof Error && err.message.includes('UNIQUE')) {
+			return conflict(`email '${email}' is already in use`)
+		}
+		throw err
+	}
+	// biome-ignore lint/style/noNonNullAssertion: row was just inserted
+	const user = db
+		.query<User, [string]>('SELECT * FROM users WHERE id = ?')
+		.get(id)!
+	return json(user, 201)
+}
+
+export function getUser(id: string): Response {
+	const user = db
+		.query<User, [string]>('SELECT * FROM users WHERE id = ?')
+		.get(id)
+	if (!user) return notFound()
+	return json(user)
+}
+
+export async function updateUser(req: Request, id: string): Promise<Response> {
+	const existing = db
+		.query<User, [string]>('SELECT * FROM users WHERE id = ?')
+		.get(id)
+	if (!existing) return notFound()
+
+	const body = await req.json()
+	const name =
+		typeof body.name === 'string' && body.name.trim()
+			? body.name.trim()
+			: existing.name
+	const email =
+		typeof body.email === 'string' && body.email.trim()
+			? body.email.trim().toLowerCase()
+			: existing.email
+
+	try {
+		db.run('UPDATE users SET name = ?, email = ? WHERE id = ?', [
+			name,
+			email,
+			id,
+		])
+	} catch (err) {
+		if (err instanceof Error && err.message.includes('UNIQUE')) {
+			return conflict(`email '${email}' is already in use`)
+		}
+		throw err
+	}
+
+	// biome-ignore lint/style/noNonNullAssertion: row was just updated
+	const user = db
+		.query<User, [string]>('SELECT * FROM users WHERE id = ?')
+		.get(id)!
+	return json(user)
+}
+
+export function deleteUser(id: string): Response {
+	const user = db
+		.query<User, [string]>('SELECT * FROM users WHERE id = ?')
+		.get(id)
+	if (!user) return notFound()
+	db.run('DELETE FROM users WHERE id = ?', [id])
 	return new Response(null, { status: 204 })
 }

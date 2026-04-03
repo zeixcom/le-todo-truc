@@ -2,10 +2,15 @@ import { watch } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import {
 	createTodo,
+	createUser,
 	deleteTodo,
+	deleteUser,
+	getUser,
 	listTodos,
+	listUsers,
 	reorderTodos,
 	updateTodo,
+	updateUser,
 } from './api/db.ts'
 import { broadcastHmr, hmrSseHandler } from './api/hmr.ts'
 import { sseHandler } from './api/sse.ts'
@@ -149,12 +154,27 @@ async function handleApi(req: Request, url: URL): Promise<Response> {
 
 	if (pathname === '/api/todos/events' && method === 'GET') return sseHandler()
 
-	const idMatch = pathname.match(/^\/api\/todos\/([^/]+)$/)
-	if (idMatch) {
-		const id = idMatch[1]
+	const todoIdMatch = pathname.match(/^\/api\/todos\/([^/]+)$/)
+	if (todoIdMatch) {
+		const id = todoIdMatch[1]
 		if (id) {
 			if (method === 'PATCH') return updateTodo(req, id)
 			if (method === 'DELETE') return deleteTodo(id)
+		}
+	}
+
+	if (pathname === '/api/users/') {
+		if (method === 'GET') return listUsers()
+		if (method === 'POST') return createUser(req)
+	}
+
+	const userIdMatch = pathname.match(/^\/api\/users\/([^/]+)$/)
+	if (userIdMatch) {
+		const id = userIdMatch[1]
+		if (id) {
+			if (method === 'GET') return getUser(id)
+			if (method === 'PUT') return updateUser(req, id)
+			if (method === 'DELETE') return deleteUser(id)
 		}
 	}
 
@@ -211,6 +231,11 @@ console.log('  POST   /api/todos/')
 console.log('  PUT    /api/todos/')
 console.log('  PATCH  /api/todos/:id')
 console.log('  DELETE /api/todos/:id')
+console.log('  GET    /api/users/')
+console.log('  POST   /api/users/')
+console.log('  GET    /api/users/:id')
+console.log('  PUT    /api/users/:id')
+console.log('  DELETE /api/users/:id')
 
 // HMR: watch source files, trigger builds, then broadcast reload to the browser
 const buildTimers = new Map<string, ReturnType<typeof setTimeout>>()
