@@ -159,7 +159,8 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 						for (let i = 0; i < keys.length; i++) {
 							const el = list.querySelector(`li[data-key="${keys[i]}"]`)
 							if (!el) continue
-							if (list.children[i] !== el) list.insertBefore(el, list.children[i] ?? null)
+							if (list.children[i] !== el)
+								list.insertBefore(el, list.children[i] ?? null)
 						}
 					}),
 

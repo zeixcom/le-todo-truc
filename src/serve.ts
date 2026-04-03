@@ -1,3 +1,4 @@
+import { watch } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import {
 	createTodo,
@@ -6,6 +7,7 @@ import {
 	reorderTodos,
 	updateTodo,
 } from './api/db.ts'
+import { broadcastHmr, hmrSseHandler } from './api/hmr.ts'
 import { sseHandler } from './api/sse.ts'
 
 type Route = {
@@ -41,6 +43,26 @@ const routes: Route[] = [
 		contentType: 'text/css; charset=utf-8',
 	},
 ]
+
+const HMR_SCRIPT = `<script>
+(function () {
+	var es = new EventSource('/hmr/events');
+	es.onmessage = function (e) {
+		var event = JSON.parse(e.data);
+		if (event.type !== 'reload') return;
+		var file = event.file;
+		if (file && file.endsWith('.css')) {
+			document.querySelectorAll('link[rel="stylesheet"]').forEach(function (link) {
+				var url = new URL(link.href);
+				link.href = url.pathname + '?v=' + Date.now();
+			});
+		} else {
+			location.reload();
+		}
+	};
+	console.log('[HMR] connected');
+})();
+</script>`
 
 function withCacheHeaders(res: Response, etag: string) {
 	const headers = new Headers(res.headers)
@@ -98,6 +120,23 @@ async function serveFile(req: Request, route: Route) {
 	return withCacheHeaders(res, etag)
 }
 
+async function serveHtml(req: Request, route: Route): Promise<Response> {
+	const source = await readFile(route.filePath, 'utf-8')
+	const injected = source.replace('</body>', `${HMR_SCRIPT}\n</body>`)
+	const encoder = new TextEncoder()
+	const bytes = encoder.encode(injected)
+	const etag = `W/"${bytes.byteLength}"`
+	const ifNoneMatch = req.headers.get('if-none-match')
+	if (ifNoneMatch && ifNoneMatch === etag) {
+		return withCacheHeaders(new Response(null, { status: 304 }), etag)
+	}
+	const res = new Response(bytes, {
+		status: 200,
+		headers: { 'Content-Type': route.contentType },
+	})
+	return withCacheHeaders(res, etag)
+}
+
 async function handleApi(req: Request, url: URL): Promise<Response> {
 	const { method } = req
 	const { pathname } = url
@@ -139,13 +178,16 @@ Bun.serve({
 
 			if (pathname.startsWith('/api/')) return handleApi(req, url)
 
+			if (pathname === '/hmr/events') return hmrSseHandler()
+
 			if (req.method !== 'GET' && req.method !== 'HEAD')
 				return methodNotAllowed()
 
 			const route = routes.find(r => r.path === pathname)
 			if (!route) return notFound(url)
 
-			const res = await serveFile(req, route)
+			const isHtml = route.contentType.startsWith('text/html')
+			const res = await (isHtml ? serveHtml(req, route) : serveFile(req, route))
 
 			// Respect HEAD semantics (same headers, no body)
 			if (req.method === 'HEAD') {
@@ -169,3 +211,45 @@ console.log('  POST   /api/todos/')
 console.log('  PUT    /api/todos/')
 console.log('  PATCH  /api/todos/:id')
 console.log('  DELETE /api/todos/:id')
+
+// HMR: watch source files, trigger builds, then broadcast reload to the browser
+const buildTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function debounced(key: string, fn: () => void, delay = 50) {
+	const t = buildTimers.get(key)
+	if (t) clearTimeout(t)
+	buildTimers.set(key, setTimeout(fn, delay))
+}
+
+// Maps each build script to the dist file it produces.
+// Broadcasting after build completion is more reliable than watching dist/
+// because macOS fs.watch returns null filenames for atomic (rename-based) writes.
+const buildOutputs: Record<string, string> = {
+	'build:html': 'index.html',
+	'build:js:dev': 'assets/main.js',
+	'build:css': 'assets/main.css',
+}
+
+function runScript(script: string) {
+	console.log(`[HMR] Building: ${script}`)
+	const proc = Bun.spawn(['bun', 'run', script], { stdout: 'inherit', stderr: 'inherit' })
+	proc.exited.then(code => {
+		if (code !== 0) {
+			console.error(`[HMR] '${script}' failed (exit ${code})`)
+			return
+		}
+		const file = buildOutputs[script]
+		if (file) broadcastHmr({ type: 'reload', file })
+	})
+}
+
+watch('./src', { recursive: true }, (_, filename) => {
+	if (!filename) return
+	if (filename.endsWith('.html.ts')) {
+		debounced('html', () => runScript('build:html'))
+	} else if (filename.endsWith('.ts')) {
+		debounced('js', () => runScript('build:js:dev'))
+	} else if (filename.endsWith('.css')) {
+		debounced('css', () => runScript('build:css'))
+	}
+})
