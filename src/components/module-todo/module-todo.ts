@@ -17,14 +17,32 @@ import {
 import type { BasicButtonProps } from '../basic-button/basic-button'
 import type { BasicPluralizeProps } from '../basic-pluralize/basic-pluralize'
 import type { FormCheckboxProps } from '../form-checkbox/form-checkbox'
+import type { FormComboboxProps } from '../form-combobox/form-combobox'
+import type { FormDateProps } from '../form-date/form-date'
+import type { FormListboxProps } from '../form-listbox/form-listbox'
 import type { FormRadiogroupProps } from '../form-radiogroup/form-radiogroup'
 import type { FormTextboxProps } from '../form-textbox/form-textbox'
+import type { ModuleDialogProps } from '../module-dialog/module-dialog'
+
+type TodoStatus = 'BACKLOG' | 'READY' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'
 
 type TodoItem = {
 	id: string
 	title: string
+	description: string | null
+	dueDate: string | null
+	authorId: string | null
+	assignedToId: string | null
+	tags: string[]
+	status: TodoStatus
 	createdAt: string
 	completedAt: string | null
+}
+
+type User = {
+	id: string
+	name: string
+	email: string
 }
 
 type SseEvent =
@@ -44,6 +62,14 @@ type ModuleTodoUI = {
 	count: Component<BasicPluralizeProps>
 	filter: Component<FormRadiogroupProps>
 	clearCompleted: Component<BasicButtonProps>
+	dialog: Component<ModuleDialogProps>
+	detailForm: HTMLFormElement
+	titleField: Component<FormTextboxProps>
+	descriptionField: Component<FormTextboxProps>
+	statusField: Component<FormListboxProps>
+	assignedToField: Component<FormComboboxProps>
+	dueDateField: Component<FormDateProps>
+	tagsField: Component<FormTextboxProps>
 }
 
 declare global {
@@ -81,13 +107,66 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 			'basic-button.clear-completed',
 			'Add <basic-button.clear-completed> component to clear completed todo items.',
 		),
+		dialog: first(
+			'module-dialog',
+			'Add <module-dialog> for editing todo items.',
+		),
+		detailForm: first(
+			'form#todo-edit-form',
+			'Add <form id="todo-edit-form"> inside the edit dialog.',
+		),
+		titleField: first(
+			'form-textbox.detail-title',
+			'Add <form-textbox class="detail-title"> inside the edit dialog.',
+		),
+		descriptionField: first(
+			'form-textbox.detail-description',
+			'Add <form-textbox class="detail-description"> inside the edit dialog.',
+		),
+		statusField: first(
+			'form-listbox.detail-status',
+			'Add <form-listbox class="detail-status"> inside the edit dialog.',
+		),
+		assignedToField: first(
+			'form-combobox.detail-assigned-to',
+			'Add <form-combobox class="detail-assigned-to"> inside the edit dialog.',
+		),
+		dueDateField: first(
+			'form-date.detail-due-date',
+			'Add <form-date class="detail-due-date"> inside the edit dialog.',
+		),
+		tagsField: first(
+			'form-textbox.detail-tags',
+			'Add <form-textbox class="detail-tags"> inside the edit dialog.',
+		),
 	}),
-	({ host, textbox, template, list, items, filter }) => {
+	({
+		host,
+		textbox,
+		template,
+		list,
+		items,
+		filter,
+		dialog,
+		detailForm,
+		titleField,
+		descriptionField,
+		statusField,
+		assignedToField,
+		dueDateField,
+		tagsField,
+	}) => {
 		// Single source of truth — stable keys = server IDs
 		const todos = createList<TodoItem>([], { keyConfig: item => item.id })
 
 		// Drag & drop state — one key being dragged at a time per component instance
 		let dragKey: string | null = null
+
+		// Currently edited todo key (empty string = none)
+		const editKey = createState<string>('')
+
+		// Known users for the assignedTo combobox lookup
+		const users = createState<User[]>([])
 
 		const activeCount = createMemo(
 			() => todos.get().filter(t => !t.completedAt).length,
@@ -107,6 +186,14 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 			else return new Error('Invalid data format of response.')
 		})
 
+		const usersData = createTask<User[]>(async (_prev, abort) => {
+			const response = await fetch('/api/users/', { signal: abort })
+			if (!response.ok) return
+			const json = await response.json()
+			if (Array.isArray(json.users)) return json.users
+			else return new Error('Invalid user data format.')
+		})
+
 		return {
 			host: [
 				// Seed the List signal from the initial fetch
@@ -115,6 +202,15 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 						match([data], {
 							ok: ([fetched]) => todos.set(fetched),
 							err: errors => console.error(errors[0]),
+						})
+					}),
+
+				// Seed the users list for assignedTo lookups
+				() =>
+					createEffect(() => {
+						match([usersData], {
+							ok: ([fetched]) => users.set(fetched),
+							err: errors => console.error('Failed to load users', errors[0]),
 						})
 					}),
 
@@ -312,6 +408,28 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 						console.error('Failed to delete todo', err),
 					)
 				}),
+				on('dblclick', e => {
+					const li = (e.target as HTMLElement).closest<HTMLLIElement>(
+						'li[data-key]',
+					)
+					if (!li) return
+					const key = li.dataset.key
+					if (!key) return
+					const todo = todos.byKey(key)?.get()
+					if (!todo) return
+
+					// Populate dialog fields with current todo data
+					titleField.value = todo.title
+					descriptionField.value = todo.description ?? ''
+					statusField.value = todo.status
+					const user = users.get().find(u => u.id === todo.assignedToId)
+					assignedToField.value = user?.name ?? ''
+					dueDateField.value = todo.dueDate ?? ''
+					tagsField.value = todo.tags.join(', ')
+
+					editKey.set(key)
+					dialog.open = true
+				}),
 			],
 			checkboxes: pass(target => {
 				const key = target.closest<HTMLElement>('[data-key]')?.dataset.key
@@ -369,6 +487,35 @@ export default defineComponent<Record<string, never>, ModuleTodoUI>(
 					)
 				}),
 			],
+			detailForm: on('submit', async e => {
+				e.preventDefault()
+				const key = editKey.get()
+				if (!key) return
+
+				const fd = new FormData(detailForm)
+				const assignedToName = (fd.get('assignedToName') as string | null) ?? ''
+				const assignedToId =
+					users.get().find(u => u.name === assignedToName)?.id ?? null
+
+				await fetch(`/api/todos/${key}`, {
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						title: ((fd.get('title') as string) ?? '').trim(),
+						description:
+							((fd.get('description') as string) ?? '').trim() || null,
+						status: (fd.get('status') as TodoStatus) || 'BACKLOG',
+						assignedToId,
+						dueDate: (fd.get('dueDate') as string | null) || null,
+						tags: ((fd.get('tags') as string) ?? '')
+							.split(',')
+							.map(t => t.trim())
+							.filter(Boolean),
+					}),
+				}).catch(err => console.error('Failed to update todo', err))
+
+				dialog.open = false
+			}),
 		}
 	},
 )

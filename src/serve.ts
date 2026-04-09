@@ -7,6 +7,7 @@ import {
 	deleteUser,
 	getUser,
 	listTodos,
+	listUserOptions,
 	listUsers,
 	reorderTodos,
 	updateTodo,
@@ -161,6 +162,10 @@ async function handleApi(req: Request, url: URL): Promise<Response> {
 			if (method === 'PATCH') return updateTodo(req, id)
 			if (method === 'DELETE') return deleteTodo(id)
 		}
+	}
+
+	if (pathname === '/api/users/options') {
+		if (method === 'GET') return listUserOptions()
 	}
 
 	if (pathname === '/api/users/') {

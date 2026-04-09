@@ -10,6 +10,8 @@ type FormTextboxRenderProps = {
 	autocomplete?: string
 	clearable: boolean
 	description?: string
+	textarea?: boolean
+	rows?: number
 }
 
 export function FormTextbox({
@@ -22,6 +24,8 @@ export function FormTextbox({
 	autocomplete,
 	clearable,
 	description,
+	textarea,
+	rows,
 }: FormTextboxRenderProps) {
 	return html`<form-textbox
 		${attr('clearable', clearable)}
@@ -29,7 +33,15 @@ export function FormTextbox({
 	>
 		<label for="${id}">${label}</label>
 		<div class="input">
-			<input
+			${textarea
+			? html`<textarea
+				id="${id}"
+				name="${name}"
+				${attr('rows', rows)}
+				${attr('required', required)}
+				${attr('aria-describedby', description && `${id}-description`)}
+			>${value ?? ''}</textarea>`
+			: html`<input
 				type="text"
 				id="${id}"
 				name="${name}"
@@ -37,7 +49,7 @@ export function FormTextbox({
 				${attr('autocomplete', autocomplete)}
 				${attr('required', required)}
 				${attr('aria-describedby', description && `${id}-description`)}
-			/>
+			/>`}
 			${clearable
 			&& html`<button
 				type="button"

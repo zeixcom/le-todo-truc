@@ -294,6 +294,13 @@ export function listUsers(): Response {
 	return json({ users })
 }
 
+export function listUserOptions(): Response {
+	const users = db
+		.query<User, []>('SELECT * FROM users ORDER BY name ASC')
+		.all()
+	return json(users.map(u => ({ value: u.name, label: u.name })))
+}
+
 export async function createUser(req: Request): Promise<Response> {
 	const body = await req.json()
 	if (typeof body.name !== 'string' || !body.name.trim()) {
