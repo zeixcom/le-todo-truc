@@ -1,19 +1,11 @@
-import {
-	batch,
-	type Component,
-	type ComponentProps,
-	createState,
-	defineComponent,
-	on,
-	toggleClass,
-} from '@zeix/le-truc'
+import { batch, bindClass, createState, defineComponent } from '@zeix/le-truc'
 
 const MIN_INTERSECTION_RATIO = 0
 const MAX_INTERSECTION_RATIO = 0.99 // ignore rounding errors of fraction pixels
 
 declare global {
 	interface HTMLElementTagNameMap {
-		'module-scrollarea': Component<ComponentProps>
+		'module-scrollarea': HTMLElement
 	}
 }
 
@@ -45,52 +37,49 @@ const observeOverflow =
 		}
 	}
 
-export default defineComponent(
-	'module-scrollarea',
-	undefined,
-	undefined,
-	({ host }) => {
-		const child = host.firstElementChild
-		if (!child) return {}
+export default defineComponent('module-scrollarea', ({ host, on, watch }) => {
+	const child = host.firstElementChild
+	if (!child) return []
 
-		const overflowStart = createState(false)
-		const overflowEnd = createState(false)
-		const hasOverflow = () => overflowStart.get() || overflowEnd.get()
+	const overflowStart = createState(false)
+	const overflowEnd = createState(false)
+	const hasOverflow = () => overflowStart.get() || overflowEnd.get()
 
-		const scrollCallback =
-			host.getAttribute('orientation') === 'horizontal'
-				? () => {
-						overflowStart.set(host.scrollLeft > 0)
-						overflowEnd.set(
-							host.scrollLeft < host.scrollWidth - host.offsetWidth,
-						)
-					}
-				: () => {
-						overflowStart.set(host.scrollTop > 0)
-						overflowEnd.set(
-							host.scrollTop < host.scrollHeight - host.offsetHeight,
-						)
-					}
+	const scrollCallback =
+		host.getAttribute('orientation') === 'horizontal'
+			? () => {
+					overflowStart.set(host.scrollLeft > 0)
+					overflowEnd.set(
+						host.scrollLeft < host.scrollWidth - host.offsetWidth,
+					)
+				}
+			: () => {
+					overflowStart.set(host.scrollTop > 0)
+					overflowEnd.set(
+						host.scrollTop < host.scrollHeight - host.offsetHeight,
+					)
+				}
 
-		return {
-			host: [
-				toggleClass('overflow', hasOverflow),
-				toggleClass('overflow-start', overflowStart),
-				toggleClass('overflow-end', overflowEnd),
-				observeOverflow(
-					child,
-					() => {
-						overflowEnd.set(true)
-					},
-					() => {
-						overflowStart.set(false)
-						overflowEnd.set(false)
-					},
-				),
-				on('scroll', () => {
-					if (hasOverflow()) batch(scrollCallback)
-				}),
-			],
-		}
-	},
-)
+	return [
+		watch(
+			() => overflowStart.get() || overflowEnd.get(),
+			bindClass(host, 'overflow'),
+		),
+		watch(overflowStart, bindClass(host, 'overflow-start')),
+		watch(overflowEnd, bindClass(host, 'overflow-end')),
+		() =>
+			observeOverflow(
+				child,
+				() => {
+					overflowEnd.set(true)
+				},
+				() => {
+					overflowStart.set(false)
+					overflowEnd.set(false)
+				},
+			)(host),
+		on(host, 'scroll', () => {
+			if (hasOverflow()) batch(scrollCallback)
+		}),
+	]
+})

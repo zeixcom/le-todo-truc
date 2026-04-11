@@ -1,51 +1,34 @@
-import {
-	asString,
-	type Component,
-	defineComponent,
-	on,
-	read,
-	setProperty,
-	setText,
-	toggleAttribute,
-} from '@zeix/le-truc'
+import { bindText, defineComponent } from '@zeix/le-truc'
 
 export type FormCheckboxProps = {
 	checked: boolean
 	label: string
 }
 
-type FormCheckboxUI = {
-	checkbox: HTMLInputElement
-	label?: HTMLElement
-}
-
 declare global {
 	interface HTMLElementTagNameMap {
-		'form-checkbox': Component<FormCheckboxProps>
+		'form-checkbox': HTMLElement & FormCheckboxProps
 	}
 }
 
-export default defineComponent<FormCheckboxProps, FormCheckboxUI>(
+export default defineComponent<FormCheckboxProps>(
 	'form-checkbox',
-	{
-		checked: read(ui => ui.checkbox.checked, false),
-		label: asString(
-			({ host, label }) =>
-				label?.textContent ?? host.querySelector('label')?.textContent ?? '',
-		),
-	},
-	({ first }) => ({
-		checkbox: first('input[type="checkbox"]', 'Add a native checkbox.'),
-		label: first('.label'),
-	}),
-	({ host, checkbox }) => ({
-		host: toggleAttribute('checked'),
-		checkbox: [
-			on('change', () => {
-				host.checked = checkbox.checked
+	({ expose, first, host, on, watch }) => {
+		const checkbox = first('input[type="checkbox"]', 'Add a native checkbox.')
+		const label = first('.label')
+
+		expose({
+			checked: checkbox.checked,
+			label: label?.textContent ?? first('label')?.textContent ?? '',
+		})
+
+		return [
+			on(checkbox, 'change', () => ({ checked: checkbox.checked })),
+			watch('checked', checked => {
+				checkbox.checked = checked
+				host.toggleAttribute('checked', checked)
 			}),
-			setProperty('checked'),
-		],
-		label: setText('label'),
-	}),
+			label && watch('label', bindText(label)),
+		]
+	},
 )

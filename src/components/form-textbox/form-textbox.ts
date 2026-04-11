@@ -1,105 +1,93 @@
 import {
-	type Component,
-	type ComponentUI,
+	bindProperty,
+	bindText,
+	bindVisible,
 	createEventsSensor,
+	createMemo,
 	defineComponent,
-	on,
-	read,
-	setAttribute,
-	setProperty,
-	setText,
+	defineMethod,
 } from '@zeix/le-truc'
-import { clearEffects, clearMethod } from '../_common/clear'
 
 export type FormTextboxProps = {
 	value: string
 	readonly length: number
 	error: string
 	description: string
-	readonly clear: () => void
-}
-
-type FormTextboxUI = {
-	textbox: HTMLInputElement | HTMLTextAreaElement
-	clear?: HTMLButtonElement
-	error?: HTMLElement
-	description?: HTMLElement
+	clear: () => void
 }
 
 declare global {
 	interface HTMLElementTagNameMap {
-		'form-textbox': Component<FormTextboxProps>
+		'form-textbox': HTMLElement & FormTextboxProps
 	}
 }
 
-export default defineComponent<FormTextboxProps, FormTextboxUI>(
+export default defineComponent<FormTextboxProps>(
 	'form-textbox',
-	{
-		value: read(ui => ui.textbox.value, ''),
-		length: createEventsSensor(
-			read(ui => ui.textbox.value.length, 0),
-			'textbox',
-			{
-				input: ({ target }) => target.value.length,
-			},
-		),
-		error: '',
-		description: ({
-			host,
-			description,
-			textbox,
-		}: ComponentUI<FormTextboxProps, FormTextboxUI>) => {
-			if (description) {
-				if (textbox.maxLength && description.dataset.remaining) {
-					return () =>
-						description.dataset.remaining?.replace(
+	({ expose, first, host, on, watch }) => {
+		const textbox = first(
+			'input, textarea',
+			'Add a native input or textarea as descendant element.',
+		)
+		const clearBtn = first('button.clear')
+		const errorEl = first('.error')
+		const descriptionEl = first('.description')
+
+		const errorId = errorEl?.id
+		const descriptionId = descriptionEl?.id
+		if (descriptionId) textbox.setAttribute('aria-describedby', descriptionId)
+
+		const descriptionMemo =
+			descriptionEl && textbox.maxLength > 0 && descriptionEl.dataset.remaining
+				? createMemo(() =>
+						descriptionEl.dataset.remaining!.replace(
 							// biome-ignore lint/suspicious/noTemplateCurlyInString: just look-alike
 							'${n}',
 							String(textbox.maxLength - host.length),
-						)
-				}
-				return description.textContent?.trim() ?? ''
-			} else {
-				return ''
-			}
-		},
-		clear: clearMethod,
-	},
-	({ first }) => ({
-		textbox: first(
-			'input, textarea',
-			'Add a native input or textarea as descendant element.',
-		),
-		clear: first('button.clear'),
-		error: first('.error'),
-		description: first('.description'),
-	}),
-	ui => {
-		const { host, textbox, error, description } = ui
-		const errorId = error?.id
-		const descriptionId = description?.id
+						),
+					)
+				: null
 
-		return {
-			textbox: [
-				on('change', () => {
-					textbox.checkValidity()
-					return {
-						value: textbox.value,
-						error: textbox.validationMessage,
-					}
+		expose({
+			value: textbox.value,
+			length: createEventsSensor(textbox, textbox.value.length, {
+				input: ({ target }) => target.value.length,
+			}),
+			error: '',
+			description: descriptionMemo ?? descriptionEl?.textContent?.trim() ?? '',
+			clear: defineMethod(() => {
+				host.value = ''
+				textbox.value = ''
+				textbox.setCustomValidity('')
+				textbox.checkValidity()
+				textbox.dispatchEvent(new Event('input', { bubbles: true }))
+				textbox.dispatchEvent(new Event('change', { bubbles: true }))
+				textbox.focus()
+			}),
+		})
+
+		return [
+			on(textbox, 'change', () => {
+				textbox.checkValidity()
+				return {
+					value: textbox.value,
+					error: textbox.validationMessage,
+				}
+			}),
+			watch('value', bindProperty(textbox, 'value')),
+			watch('error', error => {
+				textbox.ariaInvalid = String(!!error)
+				if (error && errorId) textbox.setAttribute('aria-errormessage', errorId)
+				else textbox.removeAttribute('aria-errormessage')
+			}),
+			errorEl && watch('error', bindText(errorEl)),
+			descriptionEl && watch('description', bindText(descriptionEl)),
+			clearBtn && [
+				watch('length', bindVisible(clearBtn)),
+				on(clearBtn, 'click', () => {
+					host.clear()
 				}),
-				setProperty('value'),
-				setProperty('ariaInvalid', () => String(!!host.error)),
-				setAttribute('aria-errormessage', () =>
-					host.error && errorId ? errorId : null,
-				),
-				setAttribute('aria-describedby', () =>
-					description && descriptionId ? descriptionId : null,
-				),
 			],
-			clear: clearEffects(ui),
-			error: setText('error'),
-			description: setText('description'),
-		}
+		]
 	},
 )

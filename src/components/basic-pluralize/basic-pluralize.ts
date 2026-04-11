@@ -1,86 +1,62 @@
-import {
-	asInteger,
-	type Component,
-	defineComponent,
-	type Effect,
-	setText,
-	show,
-	type UI,
-} from '@zeix/le-truc'
+import { asClampedInteger, bindText, defineComponent } from '@zeix/le-truc'
 
 export type BasicPluralizeProps = {
 	count: number
 }
 
-type BasicPluralizeUI = Partial<
-	Record<
-		| 'count'
-		| 'none'
-		| 'some'
-		| 'zero'
-		| 'one'
-		| 'two'
-		| 'few'
-		| 'many'
-		| 'other',
-		HTMLElement
-	>
->
-
 declare global {
 	interface HTMLElementTagNameMap {
-		'basic-pluralize': Component<BasicPluralizeProps>
+		'basic-pluralize': HTMLElement & BasicPluralizeProps
 	}
 }
 
 const FALLBACK_LOCALE = 'en'
 
-/**
- * Parse a string as a positive integer (>= 0), falling back to 0 for negative values
- */
-const asPositiveInteger =
-	() =>
-	<U extends UI>(ui: U, value: string | null | undefined) => {
-		const parsed = asInteger()(ui, value)
-		return parsed < 0 ? 0 : parsed
-	}
-
-export default defineComponent<BasicPluralizeProps, BasicPluralizeUI>(
+export default defineComponent<BasicPluralizeProps>(
 	'basic-pluralize',
-	{
-		count: asPositiveInteger(),
-	},
-	({ first }) => ({
-		count: first('.count'),
-		none: first('.none'),
-		some: first('.some'),
-		zero: first('.zero'),
-		one: first('.one'),
-		two: first('.two'),
-		few: first('.few'),
-		many: first('.many'),
-		other: first('.other'),
-	}),
-	({ host }) => {
+	({ expose, first, host, watch }) => {
+		const count = first('.count')
+		const none = first('.none')
+		const some = first('.some')
+		const zero = first('.zero')
+		const one = first('.one')
+		const two = first('.two')
+		const few = first('.few')
+		const many = first('.many')
+		const other = first('.other')
+
 		const pluralizer = new Intl.PluralRules(
 			host.closest('[lang]')?.getAttribute('lang') || FALLBACK_LOCALE,
 			host.hasAttribute('ordinal') ? { type: 'ordinal' } : undefined,
 		)
 
-		// Basic effects
-		const effects = {
-			count: setText(() => String(host.count)),
-			none: show(() => host.count === 0),
-			some: show(() => host.count > 0),
-		} as Record<
-			Intl.LDMLPluralRule | 'count' | 'none' | 'some',
-			Effect<BasicPluralizeProps, HTMLElement>
-		>
+		expose({ count: asClampedInteger() })
 
-		// Subset of plural categories for applicable pluralizer: ['zero', 'one', 'two', 'few', 'many', 'other']
+		const categoryElements: Partial<
+			Record<Intl.LDMLPluralRule, HTMLElement | undefined>
+		> = { zero, one, two, few, many, other }
+
 		const categories = pluralizer.resolvedOptions().pluralCategories
-		for (const category of categories)
-			effects[category] = show(() => pluralizer.select(host.count) === category)
-		return effects
+
+		return [
+			count && watch('count', bindText(count)),
+			none &&
+				watch('count', value => {
+					none.hidden = value !== 0
+				}),
+			some &&
+				watch('count', value => {
+					some.hidden = value === 0
+				}),
+			...categories.map(category => {
+				const el = categoryElements[category]
+				return (
+					el &&
+					watch('count', value => {
+						el.hidden = pluralizer.select(value) !== category
+					})
+				)
+			}),
+		]
 	},
 )

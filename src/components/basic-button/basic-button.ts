@@ -1,11 +1,4 @@
-import {
-	asBoolean,
-	asString,
-	type Component,
-	defineComponent,
-	setProperty,
-	setText,
-} from '@zeix/le-truc'
+import { bindProperty, bindText, defineComponent } from '@zeix/le-truc'
 
 export type BasicButtonProps = {
 	disabled: boolean
@@ -13,33 +6,29 @@ export type BasicButtonProps = {
 	badge: string
 }
 
-type BasicButtonUI = {
-	button: HTMLButtonElement
-	label?: HTMLSpanElement
-	badge?: HTMLSpanElement
-}
-
 declare global {
 	interface HTMLElementTagNameMap {
-		'basic-button': Component<BasicButtonProps>
+		'basic-button': HTMLElement & BasicButtonProps
 	}
 }
 
-export default defineComponent<BasicButtonProps, BasicButtonUI>(
+export default defineComponent<BasicButtonProps>(
 	'basic-button',
-	{
-		disabled: asBoolean(),
-		label: asString(ui => ui.label?.textContent ?? ui.button.textContent),
-		badge: asString(ui => ui.badge?.textContent ?? ''),
+	({ expose, first, watch }) => {
+		const button = first('button', 'Add a native button as descendant.')
+		const label = first('span.label')
+		const badge = first('span.badge')
+
+		expose({
+			disabled: button.disabled,
+			label: label?.textContent ?? button.textContent ?? '',
+			badge: badge?.textContent ?? '',
+		})
+
+		return [
+			watch('disabled', bindProperty(button, 'disabled')),
+			label && watch('label', bindText(label)),
+			badge && watch('badge', bindText(badge)),
+		]
 	},
-	({ first }) => ({
-		button: first('button', 'Add a native button as descendant.'),
-		label: first('span.label'),
-		badge: first('span.badge'),
-	}),
-	() => ({
-		button: setProperty('disabled'),
-		label: setText('label'),
-		badge: setText('badge'),
-	}),
 )
